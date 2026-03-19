@@ -441,16 +441,10 @@ h1,h2,h3,.syne{font-family:'Syne',sans-serif;}
         </div>
         <div class="form-body">
           <div class="field"><label>Descrição</label><input type="text" id="desc" placeholder="Ex: Jantar no restaurante..."/></div>
-          <div class="form-row">
-            <div class="field"><label>Valor (R$)</label><input type="number" id="valor" placeholder="0,00" min="0" step="0.01"/></div>
-            <div class="field"><label>Quem pagou</label>
-              <select id="payer">
-                <option value="0">Ana</option>
-                <option value="1">Bruno</option>
-                <option value="both">Ambos (50% cada)</option>
-              </select>
-            </div>
-          </div>
+          <div class="field"><label>Valor (R$)</label><input type="number" id="valor" placeholder="0,00" min="0" step="0.01"/></div>
+          <select id="payer" style="display:none;">
+            <option value="both">Ambos (50% cada)</option>
+          </select>
           <div class="form-row">
             <div class="field"><label>Categoria</label>
               <select id="category">
