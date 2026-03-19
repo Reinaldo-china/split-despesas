@@ -350,6 +350,9 @@ h1,h2,h3,.syne{font-family:'Syne',sans-serif;}
 @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 .pane{animation:fadeIn .2s ease;}
 
+.export-btn{color:var(--accent)!important;border:1px solid var(--accent-border)!important;background:var(--accent-bg)!important;}
+.export-btn:hover{background:rgba(200,240,96,.15)!important;}
+
 /* SAVING MSG */
 .save-bar{
   position:fixed;bottom:20px;right:20px;
@@ -387,6 +390,10 @@ h1,h2,h3,.syne{font-family:'Syne',sans-serif;}
       </button>
     </nav>
     <div class="sidebar-footer">
+      <button class="nav-item export-btn" onclick="exportXLSX()" style="margin-bottom:10px;width:100%;">
+        <svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v9M6 8l3 3 3-3"/><path d="M3 13v2a1 1 0 001 1h10a1 1 0 001-1v-2"/></svg>
+        <span class="nav-label">Exportar .xlsx</span>
+      </button>
       <div class="db-pill">
         <div class="db-dot" id="dbDot"></div>
         <span id="dbLabel">Dados salvos</span>
@@ -830,5 +837,79 @@ document.getElementById('date').value=new Date().toISOString().slice(0,10);
 document.getElementById('payDate').value=new Date().toISOString().slice(0,10);
 load();
 </script>
-</body>
-</html>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+function exportXLSX(){
+  if(!expenses.length&&!payments.length){alert('Nenhum lançamento para exportar.');return;}
+  const wb=XLSX.utils.book_new();
+  const fmtNum=v=>parseFloat(Number(v).toFixed(2));
+  const today=new Date().toLocaleDateString('pt-BR');
+
+  // --- ABA 1: DESPESAS ---
+  const despHeader=[['Data','Descrição','Categoria','Quem pagou','Valor (R$)','Cada um paga (R$)','Status']];
+  const despRows=expenses.map(e=>{
+    const d=e.date?e.date.split('-').reverse().join('/'):'';
+    let quemPagou,status;
+    if(e.payer==='both'){quemPagou='Ambos';status='Ambos pagaram';}
+    else{
+      quemPagou=names[parseInt(e.payer)];
+      const bal=expBal(e),tp=getPayTotal(e.id);
+      status=bal<=0.01?'Quitado':tp>0?'Parcial':'Pendente';
+    }
+    return[d,e.desc,e.cat.replace(/\p{Emoji}/gu,'').trim()||e.cat,quemPagou,fmtNum(e.valor),fmtNum(e.valor/2),status];
+  });
+  const totalDesp=expenses.reduce((s,e)=>s+e.valor,0);
+  despRows.push([]);
+  despRows.push(['','','','Total',fmtNum(totalDesp),fmtNum(totalDesp/2),'']);
+  const wsDesp=XLSX.utils.aoa_to_sheet([...despHeader,...despRows]);
+  wsDesp['!cols']=[{wch:12},{wch:30},{wch:16},{wch:16},{wch:14},{wch:18},{wch:12}];
+  XLSX.utils.book_append_sheet(wb,wsDesp,'Despesas');
+
+  // --- ABA 2: PAGAMENTOS ---
+  const pagHeader=[['Data','Quem pagou','Valor (R$)','Despesa vinculada','Observação']];
+  const pagRows=payments.map(p=>{
+    const d=p.date?p.date.split('-').reverse().join('/'):'';
+    const linked=p.expenseId?expenses.find(e=>e.id===p.expenseId):null;
+    return[d,names[parseInt(p.who)],fmtNum(p.valor),linked?linked.desc:'—',p.obs||'—'];
+  });
+  const totalPag=payments.reduce((s,p)=>s+p.valor,0);
+  pagRows.push([]);
+  pagRows.push(['','Total',fmtNum(totalPag),'','']);
+  const wsPag=XLSX.utils.aoa_to_sheet([...pagHeader,...pagRows]);
+  wsPag['!cols']=[{wch:12},{wch:16},{wch:14},{wch:30},{wch:20}];
+  XLSX.utils.book_append_sheet(wb,wsPag,'Pagamentos');
+
+  // --- ABA 3: RESUMO ---
+  const{paid,share}=expPaid();
+  const totalPayments=payments.reduce((s,p)=>s+p.valor,0);
+  const bal0=paid[0]-share[0];
+  const aberto=Math.max(0,Math.abs(bal0)-totalPayments);
+  let situacao;
+  if(Math.abs(bal0)<0.01) situacao='Equilibrado';
+  else if(aberto<0.01) situacao=(bal0<0?names[0]:names[1])+' já quitou';
+  else situacao=(bal0<0?names[0]:names[1])+' deve '+(bal0<0?names[1]:names[0]);
+
+  const resumoData=[
+    ['RESUMO GERAL',''],
+    ['Exportado em',today],
+    ['',''],
+    ['Total de despesas',fmtNum(expenses.reduce((s,e)=>s+e.valor,0))],
+    ['Total de pagamentos',fmtNum(totalPayments)],
+    ['Saldo em aberto',fmtNum(aberto)],
+    ['',''],
+    ['BALANÇO POR PESSOA',''],
+    ['Pessoa','Pagou em despesas','Deveria pagar','Diferença'],
+    [names[0],fmtNum(paid[0]),fmtNum(share[0]),fmtNum(paid[0]-share[0])],
+    [names[1],fmtNum(paid[1]),fmtNum(share[1]),fmtNum(paid[1]-share[1])],
+    ['','','',''],
+    ['Situação',situacao,'',''],
+  ];
+  const wsRes=XLSX.utils.aoa_to_sheet(resumoData);
+  wsRes['!cols']=[{wch:24},{wch:20},{wch:16},{wch:14}];
+  XLSX.utils.book_append_sheet(wb,wsRes,'Resumo');
+
+  const filename=`splitapp-${new Date().toISOString().slice(0,10)}.xlsx`;
+  XLSX.writeFile(wb,filename);
+}
+</script>
+</body></html>
